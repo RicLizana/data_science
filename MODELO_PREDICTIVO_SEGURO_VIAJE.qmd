@@ -1,0 +1,358 @@
+---
+title: "CATEDRA_1"
+format: pdf
+editor: visual
+---
+
+# Identificar las variables asociadas a la contratacion de un seguro de viaje
+
+### **Introducción**
+
+El objetivo del proyecto es analizar que variables dentro del dataset estas relacionas con la contratacion del seguro de viaje al extranjero y apoyar la toma de desiciones en la campaña comercial con la creacion de visualizaciones.
+
+### **Objetivos específicos:**
+
+-   Identificar los campos disponibles en el dataset y su tipo de dato.
+
+-   Realizar un analisis exploratorio del dataset.
+
+-   Crear una funcion que permita limpiar el data set.
+
+-   Crear coeficientes de correlacion entre variables.
+
+-   Clasificar a los clientes en base a las variables identificadas.
+
+-   Crear visualizaciones en base a las variables correlacionadas.
+
+-   Implementar un modelo predictivo de contratacion de seguro de viaje.
+
+### Cargar librerías necesarias
+
+```{r}
+# Cargar librerías necesarias
+library(readr)
+library(ggplot2)
+library(summarytools)
+library(tidyverse)
+library(summarytools)
+
+# Cargar el archivo CSV
+datos <- read.csv("SEGURO_VIAJE.csv", header = TRUE, sep = ";")
+```
+
+### Inspección inicial de los datos
+
+```{r}
+
+# Inspección inicial de los datos
+glimpse(datos)  # Estructura compacta
+dfSummary(datos)  # Estadísticas descriptivas detalladas
+```
+
+### Limpieza de datos con TIDIVERSE
+
+```{r}
+#Limpieza de datos con TIDIVERSE
+
+library(tidyverse)
+
+# 1️ Función para eliminar duplicados
+eliminar_duplicados <- function(df) {
+  df %>% distinct()
+}
+
+# 2️ Función para manejar valores faltantes
+manejar_na <- function(df, metodo = "mediana") {
+  df %>% mutate(across(where(is.numeric), ~ ifelse(is.na(.), 
+                                                    ifelse(metodo == "media", mean(., na.rm = TRUE), median(., na.rm = TRUE)), .)))
+}
+
+# 3️ Función para convertir columnas categóricas a factores
+convertir_a_factor <- function(df) {
+  df %>% mutate(across(where(is.character), as.factor))
+}
+
+# 4️ Función para eliminar valores atípicos usando el rango intercuartil
+eliminar_outliers <- function(df) {
+  df %>% filter(
+    INGRESO.ANUAL > quantile(INGRESO.ANUAL, 0.25) - 1.5 * IQR(INGRESO.ANUAL) &
+    INGRESO.ANUAL < quantile(INGRESO.ANUAL, 0.75) + 1.5 * IQR(INGRESO.ANUAL)
+  )
+}
+
+# 5 Función para renombrar columnas y evitar espacios o caracteres especiales
+renombrar_columnas <- function(df) {
+  df %>% rename_with(~ str_replace_all(.x, " ", "_"))
+}
+
+# Aplicar todas las funciones en el dataset
+datos_limpios <- datos %>%
+  eliminar_duplicados() %>%
+  manejar_na(metodo = "mediana") %>%
+  convertir_a_factor() %>%
+  eliminar_outliers() %>%
+  renombrar_columnas()
+
+# Ver estructura después de limpieza
+glimpse(datos_limpios)
+
+```
+
+(\*agregar comentarios, describiendo los datos)
+
+### Análisis de correlaciones con Tidyverse
+
+```{r}
+
+# Análisis de correlaciones con Tidyverse
+datos$VIAJERO.FRECUENTE <- as.numeric(as.factor(datos$VIAJERO.FRECUENTE))
+datos$VIAJE.AL.EXTRANJERO <- as.numeric(as.factor(datos$VIAJE.AL.EXTRANJERO))
+datos$SEGURO.DE.VIAJE <- as.numeric(as.factor(datos$SEGURO.DE.VIAJE))
+
+correlaciones <- datos %>%
+  select(EDAD, INGRESO.ANUAL, FAMILIARES, ENFERMEDADES, VIAJERO.FRECUENTE, VIAJE.AL.EXTRANJERO, SEGURO.DE.VIAJE) %>%
+  cor(use = "complete.obs")
+
+print(correlaciones)
+```
+
+(dejar en formato de tabla, con 2 decimales)
+
+### Analisis de correlaciones:
+
+-   **El ingreso anual es el mejor predictor de la contratación del seguro de viaje**
+
+    -   **Correlación de 0.39** con seguro de viaje, lo que indica que las personas con mayores ingresos tienen más probabilidad de contratar un seguro.
+
+    -   Se refuerza la hipótesis de que el **factor económico es determinante** en esta decisión.
+
+        **Viajar al extranjero aumenta la probabilidad de contratar seguro**
+
+    -   **Correlación de 0.43** entre viaje al extranjero y seguro de viaje
+
+    -   Esto sugiere que las personas que viajan fuera de su país consideran más importante tener un seguro de viaje.
+
+-   **Ser viajero frecuente también influye, aunque en menor medida**
+
+    -   **Correlación de 0.23** entre viajero frecuente y seguro de viaje
+
+    -   Esto indica que viajar con frecuencia incrementa la posibilidad de asegurar un viaje.
+
+-   **Edad y número de familiares tienen una correlación débil**
+
+    -   **Edad (0.06)** y **Familiares (0.08)** no parecen ser factores clave en la decisión de contratar un seguro.
+
+    -   Es posible que otros factores como el destino o el tipo de viaje tengan más impacto que la edad o la cantidad de familiares.
+
+Las variables más relevantes para predecir si una persona contratará un seguro de viaje son INGRESO ANUAL, VIAJE AL EXTRANJERO y VIAJERO FRECUENTE. La edad y la cantidad de familiares parecen tener menos impacto en la decisión.
+
+### Visualizaciones
+
+### Grafico de densidad
+
+```{r}
+
+#Distribución de ingresos anuales
+#Muestra cómo los ingresos anuales varían entre quienes contratan o no un seguro.
+
+datos %>%
+  ggplot(aes(x = INGRESO.ANUAL, fill = factor(SEGURO.DE.VIAJE))) +
+  geom_density(alpha = 0.6) +
+  theme_minimal() +
+  labs(title = "Distribución de Ingreso Anual por Seguro de Viaje",
+       x = "Ingreso Anual",
+       y = "Densidad")
+
+```
+
+### Grafico de puntos
+
+```{r}
+
+#Relación entre ingreso anual y edad
+#Se podrá ver si hay un patrón entre edad e ingresos en función de la contratación de #seguros.
+
+datos %>%
+  ggplot(aes(x = EDAD, y = INGRESO.ANUAL, color = factor(SEGURO.DE.VIAJE))) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(title = "Relación entre Edad e Ingreso Anual y Seguro de Viaje",
+       x = "Edad",
+       y = "Ingreso Anual")
+
+```
+
+### Grafico de barras
+
+```{r}
+#Impacto del viaje al extranjero en la contratación de seguro
+
+#Muestra qué porcentaje de los que viajan al extranjero contratan seguros.
+
+datos %>%
+  ggplot(aes(x = factor(VIAJE.AL.EXTRANJERO), fill = factor(SEGURO.DE.VIAJE))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Impacto del Viaje al Extranjero en el Seguro de Viaje",
+       x = "Viaje al Extranjero",
+       y = "Proporción")
+
+```
+
+### Modelo predictivo con regresión logística
+
+### Preparacion de datos para el modelo
+
+```{r}
+
+#Convertir variables categóricas a numéricas
+#Esto asegurará que todas las variables sean numéricas para el modelo.
+
+datos <- datos %>%
+  mutate(
+    VIAJERO.FRECUENTE = as.numeric(as.factor(VIAJERO.FRECUENTE)),
+    VIAJE.AL.EXTRANJERO = as.numeric(as.factor(VIAJE.AL.EXTRANJERO)),
+    SEGURO.DE.VIAJE = as.numeric(as.factor(SEGURO.DE.VIAJE))
+  )
+
+datos$SEGURO.DE.VIAJE <- ifelse(datos$SEGURO.DE.VIAJE == 2, 1, 0)
+
+```
+
+### Modelo predictivo con Regresion logistica
+
+```{r}
+
+#Ajustar el modelo de regresión logística
+#Mostrará la influencia de ingresos, frecuencia de viaje y viajes al extranjero en la #contratación de seguros.
+
+modelo <- glm(SEGURO.DE.VIAJE ~ INGRESO.ANUAL + VIAJE.AL.EXTRANJERO + VIAJERO.FRECUENTE, 
+              data = datos, family = binomial)
+
+summary(modelo)
+
+
+```
+
+(funcion CO R para ver impacto de las probabilidades
+
+función en R para calcuar los OR (Odd Ratio)
+
+### Analisis de resultados:
+
+**Intercepto (-4.575)**
+
+-   Un valor negativo indica que, sin considerar otras variables, la probabilidad de contratar un seguro es baja.
+
+**Ingreso Anual (1.521e-06, p \< 2e-16)**
+
+-   Aunque el coeficiente es muy pequeño, la significancia estadística es alta, lo que indica que el ingreso anual influye en la decisión de adquirir un seguro.
+
+-   Mientras mayor sea el ingreso, mayor es la probabilidad de contratar un seguro.
+
+**Viaje al Extranjero (1.669, p \< 2e-16)**
+
+-   Este coeficiente es relativamente alto y significativo, indicando que viajar al extranjero aumenta la probabilidad de contratar un seguro.
+
+**Viajero Frecuente (0.4188, p = 0.00185)**
+
+-   Ser un viajero frecuente también influye positivamente, aunque con un impacto menor en comparación con "Viaje al extranjero".
+
+    **Null Deviance (2590.5) vs. Residual Deviance (2107.5)** → La reducción indica que el modelo mejora la predicción respecto a un modelo sin variables explicativas.
+
+    **AIC (2115.5)** Un valor más bajo sugiere un buen ajuste del modelo.
+
+### Evaluar desempeño con una matriz de confusión
+
+```{r}
+
+library(caret)
+datos$predicciones <- predict(modelo, type = "response")
+datos$predicciones_bin <- ifelse(datos$predicciones > 0.5, 1, 0)
+confusionMatrix(factor(datos$predicciones_bin), factor(datos$SEGURO.DE.VIAJE))
+
+```
+
+La metrica de error asociada a la curva ROC
+
+### Analisis del modelo
+
+**Exactitud (Accuracy: 76.8%)**
+
+-   Indica que el modelo predice correctamente en **76.8% de los casos**.
+
+-   **95% CI:** El intervalo de confianza sugiere que el rendimiento se mantiene entre 74.88% y 78.64%, lo que demuestra una estabilidad razonable.
+
+**Sensibilidad (0.9272)**
+
+-   **Detecta bien los casos negativos (**0**)**.
+
+-   Un valor alto indica que el modelo clasifica correctamente a quienes no contrataron el seguro.
+
+**Especificidad (0.4817)**
+
+-   **Dificultad en identificar casos positivos (**1**)**.
+
+-   Solo el 48.17% de los casos donde sí se contrató seguro son correctamente detectados.
+
+**Valor predictivo positivo (0.7629) y negativo (0.7862)**
+
+-   Si el modelo predice 1, hay un 76.29% de probabilidad de que sea correcto.
+
+-   Si predice 0, hay un 78.62% de probabilidad de que sea correcto.
+
+**Kappa (0.4473)**
+
+-   Mide el grado de acuerdo entre la predicción y los datos reales.
+
+-   Un valor de 0.4473 indica una precisión moderada, pero hay margen de mejora.
+
+### Visualizar los resultados del modelo
+
+```{r}
+
+#Visualizar los resultados del modelo
+
+ggplot(datos, aes(x = INGRESO.ANUAL, y = predicciones)) +
+  geom_point() +
+  labs(title = "Probabilidad estimada de contratar un seguro según ingreso")
+
+```
+
+Programar una función que tome un data-set y me devuelva un modelo predictivo Logistico listo para usar.
+
+Toma el dataset original y y dividirlo en dos: 80% en datos de entrenamiento y el 20% para test.
+
+### **Conclusión Final del Proyecto: Factores que Influyen en la Contratación de un Seguro de Viaje**
+
+Tras realizar un análisis exploratorio y ajustar un modelo de regresión logística, llegamos a conclusiones importantes sobre qué factores determinan la contratación de un seguro de viaje.
+
+### **Hallazgos Clave**
+
+**El Ingreso Anual es el principal predictor**
+
+-   Las personas con mayores ingresos tienen más probabilidad de contratar un seguro.
+
+-   La correlación entre Ingreso Anual y Seguro de Viaje es positiva y significativa, lo que sugiere que la seguridad financiera es un factor clave en la decisión.
+
+**Viajar al extranjero aumenta la contratación del seguro**
+
+-   Se observó una relación significativa entre "Viaje al extranjero" y "Seguro de viaje".
+
+-   Los viajeros que salen del país son más propensos a asegurarse, lo que puede deberse a los riesgos adicionales de viajar fuera del entorno familiar.
+
+**Ser viajero frecuente también influye**
+
+-   `VIAJERO.FRECUENTE` tiene un impacto menor pero significativo en la decisión.
+
+-   Las personas que viajan con frecuencia pueden estar más conscientes de los beneficios del seguro.
+
+### **Evaluación del Modelo**
+
+**Precisión general del modelo: 76.8%**
+
+**Alta sensibilidad (92.7%)**: Capacidad del modelo para identificar correctamente a quienes no contratan seguro.
+
+**Especificidad moderada (48.2%)**: Aún hay margen de mejora para detectar correctamente a quienes **sí contratan** seguro.
+
+Este estudio demuestra que el nivel de ingresos y los viajes al extranjero son los principales impulsores de la contratación de seguros. Estas conclusiones pueden ayudar a la empresa aseguradora a optimizar su oferta y estrategias de marketing, asegurando que los viajeros reciban productos personalizados según sus necesidades reales.
