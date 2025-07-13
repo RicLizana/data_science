@@ -1,0 +1,350 @@
+---
+title: "EXAMEN"
+format: html
+editor: visual
+---
+
+# FUNCION PARA PREDECIR UN SEGURO DE VIAJE
+
+El objetivo de la funcion es limpiar un data set, para luego obtener las variales con mayor correlacion y aplicar un modelo predictivo con ellas.
+
+-   Crear una funcion que permita limpiar el data set.
+
+-   Crear coeficientes de correlacion entre variables.
+
+-   Implementar un modelo predictivo de contratacion de seguro de viaje.
+
+```{r}
+
+# Cargar librerías necesarias
+library(readr)
+library(ggplot2)
+library(summarytools)
+library(tidyverse)
+library(summarytools)
+library(DT)
+library(pROC)
+library(tidyverse)
+library(knitr)
+# Cargar el archivo CSV
+
+#datos <- read.csv(file.choose())
+#datos <- read.csv("SEGURO_VIAJE.csv", header = TRUE, sep = ";")
+datos <- read.csv("/cloud/project/SEGURO_VIAJE.csv", sep = ";")
+
+```
+
+### Limpieza de datos con TIDIVERSE
+
+```{r}
+
+#Limpieza de datos con TIDIVERSE
+
+
+
+# 1️ Función para eliminar duplicados
+eliminar_duplicados <- function(df) {
+  df %>% distinct()
+}
+
+# 2️ Función para manejar valores faltantes
+manejar_na <- function(df, metodo = "mediana") {
+  df %>% mutate(across(where(is.numeric), ~ ifelse(is.na(.), 
+                                                    ifelse(metodo == "media", mean(., na.rm = TRUE), median(., na.rm = TRUE)), .)))
+}
+
+# 3️ Función para convertir columnas categóricas a factores
+convertir_a_factor <- function(df) {
+  df %>% mutate(across(where(is.character), as.factor))
+}
+
+# 4️ Función para eliminar valores atípicos usando el rango intercuartil
+eliminar_outliers <- function(df) {
+  df %>% filter(
+    INGRESO.ANUAL > quantile(INGRESO.ANUAL, 0.25) - 1.5 * IQR(INGRESO.ANUAL) &
+    INGRESO.ANUAL < quantile(INGRESO.ANUAL, 0.75) + 1.5 * IQR(INGRESO.ANUAL)
+  )
+}
+
+# 5 Función para renombrar columnas y evitar espacios o caracteres especiales
+renombrar_columnas <- function(df) {
+  df %>% rename_with(~ str_replace_all(.x, " ", "_"))
+}
+
+# Aplicar todas las funciones en el dataset
+datos_limpios <- datos %>%
+  eliminar_duplicados() %>%
+  manejar_na(metodo = "mediana") %>%
+  convertir_a_factor() %>%
+  eliminar_outliers() %>%
+  renombrar_columnas()
+
+# Ver estructura después de limpieza
+glimpse(datos_limpios)
+```
+
+Se identificaron 1249 filas y 9 columnas con tipos de datos numericos ,alfanumericos y booleanos.
+
+| Variable              | Tipo     | Descripción Breve                                   |
+|------------------|-----------------|--------------------------------------|
+| `EDAD`                | Numérica | Edad del individuo, en años                         |
+| `TIPO.EMPLEADO`       | Factor   | Sector de empleo (Ej: Gobierno, Privado)            |
+| `TITULO`              | Factor   | Indica si el individuo tiene título universitario   |
+| `INGRESO.ANUAL`       | Numérica | Ingreso anual en moneda local                       |
+| `FAMILIARES`          | Numérica | Número de miembros familiares                       |
+| `ENFERMEDADES`        | Binaria  | Presencia de enfermedades (1 = sí, 0 = no)          |
+| `VIAJERO.FRECUENTE`   | Factor   | Indica si la persona viaja frecuentemente           |
+| `VIAJE.AL.EXTRANJERO` | Factor   | Indica si ha viajado al extranjero                  |
+| `SEGURO.DE.VIAJE`     | Binaria  | Indica si contrató seguro de viaje (1 = sí, 0 = no) |
+
+### Análisis de correlaciones con Tidyverse
+
+```{r}
+
+library(DT)
+
+# Análisis de correlaciones con Tidyverse
+datos$VIAJERO.FRECUENTE <- as.numeric(as.factor(datos$VIAJERO.FRECUENTE))
+datos$VIAJE.AL.EXTRANJERO <- as.numeric(as.factor(datos$VIAJE.AL.EXTRANJERO))
+datos$SEGURO.DE.VIAJE <- as.numeric(as.factor(datos$SEGURO.DE.VIAJE))
+
+correlaciones <- datos %>%
+  select(EDAD, INGRESO.ANUAL, FAMILIARES, ENFERMEDADES, VIAJERO.FRECUENTE, VIAJE.AL.EXTRANJERO, SEGURO.DE.VIAJE) %>%
+  cor(use = "complete.obs")
+
+
+datatable(round(correlaciones, 2), 
+          caption = "Matriz de Correlaciones (2 decimales)", 
+          options = list(pageLength = 7, scrollX = TRUE))
+
+
+```
+
+### Analisis de correlaciones:
+
+-   **El ingreso anual es el mejor predictor de la contratación del seguro de viaje**
+
+    -   **Correlación de 0.39** con seguro de viaje, lo que indica que las personas con mayores ingresos tienen más probabilidad de contratar un seguro.
+
+    -   Se refuerza la hipótesis de que el **factor económico es determinante** en esta decisión.
+
+        **Viajar al extranjero aumenta la probabilidad de contratar seguro**
+
+    -   **Correlación de 0.43** entre viaje al extranjero y seguro de viaje
+
+    -   Esto sugiere que las personas que viajan fuera de su país consideran más importante tener un seguro de viaje.
+
+-   **Ser viajero frecuente también influye, aunque en menor medida**
+
+    -   **Correlación de 0.23** entre viajero frecuente y seguro de viaje
+
+    -   Esto indica que viajar con frecuencia incrementa la posibilidad de asegurar un viaje.
+
+-   **Edad y número de familiares tienen una correlación débil**
+
+    -   **Edad (0.06)** y **Familiares (0.08)** no parecen ser factores clave en la decisión de contratar un seguro.
+
+    -   Es posible que otros factores como el destino o el tipo de viaje tengan más impacto que la edad o la cantidad de familiares.
+
+Las variables más relevantes para predecir si una persona contratará un seguro de viaje son INGRESO ANUAL, VIAJE AL EXTRANJERO y VIAJERO FRECUENTE. La edad y la cantidad de familiares parecen tener menos impacto en la decisión.
+
+### Implementacion de modelo predictivo
+
+### Preparacion de datos para el modelo
+
+```{r}
+
+#Convertir variables categóricas a numéricas
+
+#Esto asegurará que todas las variables sean numéricas para el modelo.
+
+datos <- datos %>%
+  mutate(
+    VIAJERO.FRECUENTE = as.numeric(as.factor(VIAJERO.FRECUENTE)),
+    VIAJE.AL.EXTRANJERO = as.numeric(as.factor(VIAJE.AL.EXTRANJERO)),
+    SEGURO.DE.VIAJE = as.numeric(as.factor(SEGURO.DE.VIAJE))
+  )
+
+datos$SEGURO.DE.VIAJE <- ifelse(datos$SEGURO.DE.VIAJE == 2, 1, 0)
+```
+
+### Modelo predictivo con Regresion logistica
+
+```{r}
+
+#Ajustar el modelo de regresión logística
+#Mostrará la influencia de ingresos, frecuencia de viaje y viajes al extranjero en la #contratación de seguros.
+
+modelo <- glm(SEGURO.DE.VIAJE ~ INGRESO.ANUAL + VIAJE.AL.EXTRANJERO + VIAJERO.FRECUENTE, 
+              data = datos, family = binomial)
+
+summary(modelo)
+```
+
+### Evaluar desempeño con una matriz de confusión
+
+```{r}
+
+# MATRIZ PARA EVALUAR DESEMPEÑO DEL MODELO
+library(caret)
+
+datos$predicciones <- predict(modelo, type = "response")
+datos$predicciones_bin <- ifelse(datos$predicciones > 0.5, 1, 0)
+confusionMatrix(factor(datos$predicciones_bin), factor(datos$SEGURO.DE.VIAJE))
+```
+
+### Analisis del modelo
+
+**Exactitud (Accuracy: 76.8%)**
+
+-   Indica que el modelo predice correctamente en **76.8% de los casos**.
+
+-   **95% CI:** El intervalo de confianza sugiere que el rendimiento se mantiene entre 74.88% y 78.64%, lo que demuestra una estabilidad razonable.
+
+**Sensibilidad (0.9272)**
+
+-   **Detecta bien los casos negativos (**0**)**.
+
+-   Un valor alto indica que el modelo clasifica correctamente a quienes no contrataron el seguro.
+
+**Especificidad (0.4817)**
+
+-   **Dificultad en identificar casos positivos (**1**)**.
+
+-   Solo el 48.17% de los casos donde sí se contrató seguro son correctamente detectados.
+
+**Valor predictivo positivo (0.7629) y negativo (0.7862)**
+
+-   Si el modelo predice 1, hay un 76.29% de probabilidad de que sea correcto.
+
+-   Si predice 0, hay un 78.62% de probabilidad de que sea correcto.
+
+**Kappa (0.4473)**
+
+-   Mide el grado de acuerdo entre la predicción y los datos reales.
+
+-   Un valor de 0.4473 indica una precisión moderada, pero hay margen de mejora.
+
+### Visualizar los resultados del modelo
+
+```{r}
+
+#Visualizar los resultados del modelo
+
+ggplot(datos, aes(x = INGRESO.ANUAL, y = predicciones)) +
+  geom_point() +
+  labs(title = "Probabilidad estimada de contratar un seguro según ingreso")
+```
+
+# Funcion ajustada
+
+```{r}
+modelo_seguros_predictivo <- function(data, variable_respuesta = "SEGURO.DE.VIAJE", top_n = 4) {
+
+# Cargar librerías necesarias
+library(readr)
+library(ggplot2)
+library(summarytools)
+library(tidyverse)
+library(summarytools)
+library(DT)
+library(pROC)
+
+# Cargar el archivo CSV
+
+datos <- read.csv(file.choose(), header = TRUE, sep = ";")
+#datos <- read.csv("SEGURO_VIAJE.csv", header = TRUE, sep = ";")
+#datos <- read.csv("/cloud/project/SEGURO_VIAJE.csv", sep = ";")
+
+
+#Limpieza de datos con TIDIVERSE
+
+library(tidyverse)
+
+# 1️ Función para eliminar duplicados
+eliminar_duplicados <- function(df) {
+  df %>% distinct()
+}
+
+# 2️ Función para manejar valores faltantes
+manejar_na <- function(df, metodo = "mediana") {
+  df %>% mutate(across(where(is.numeric), ~ ifelse(is.na(.), 
+                                                    ifelse(metodo == "media", mean(., na.rm = TRUE), median(., na.rm = TRUE)), .)))
+}
+
+# 3️ Función para convertir columnas categóricas a factores
+convertir_a_factor <- function(df) {
+  df %>% mutate(across(where(is.character), as.factor))
+}
+
+ # 4 Identificar columnas binarias (con solo dos niveles)
+  binarias <- sapply(datos, function(x) is.character(x) || is.factor(x))
+  niveles_binarios <- sapply(datos[binarias], function(x) length(unique(x)) == 2)
+  vars_binarias <- names(niveles_binarios[niveles_binarios])
+
+  # 5 Convertir esas variables binarias a numéricas
+  for (var in vars_binarias) {
+    datos[[var]] <- as.numeric(as.factor(datos[[var]])) - 1
+    message(paste(" Se convirtió", var, "a formato binario numérico."))
+  }
+
+  # 6 Convertir la variable respuesta si no es numérica
+  if (!is.numeric(data[[variable_respuesta]])) {
+    datos[[variable_respuesta]] <- as.numeric(as.factor(data[[variable_respuesta]])) - 1
+    message("✔ Variable objetivo convertida a binaria (0: No, 1: Sí).")
+  }
+
+  # 7 Selección de variables numéricas (excluyendo la respuesta)
+  datos_num <- data %>%
+    select(where(is.numeric)) %>%
+    select(-all_of(variable_respuesta))
+
+  # 8 Calcular correlaciones
+  cor_vals <- cor(datos_num, data[[variable_respuesta]], use = "complete.obs")
+  cor_df <- data.frame(
+    variable = rownames(cor_vals),
+    correlacion = round(abs(cor_vals[, 1]), 3)
+  )
+  message(" Correlaciones con SEGURO.DE.VIAJE:")
+  print(cor_df)
+
+  # 9 Seleccionar variables más correlacionadas
+  variables_top <- cor_df %>%
+    arrange(desc(correlacion)) %>%
+    slice(1:top_n) %>%
+    pull(variable)
+  message(" Variables seleccionadas para el modelo:")
+  print(variables_top)
+
+
+# 10 Función para renombrar columnas y evitar espacios o caracteres especiales
+renombrar_columnas <- function(df) {
+  df %>% rename_with(~ str_replace_all(.x, " ", "_"))
+}
+
+
+# Aplicar todas las funciones en el dataset
+datos_limpios <- datos %>%
+  eliminar_duplicados() %>%
+  manejar_na(metodo = "mediana") %>%
+  convertir_a_factor() %>%
+  eliminar_outliers() %>%
+  renombrar_columnas()
+
+
+
+  #  Crear fórmula y ajustar modelo
+  formula <- as.formula(paste(variable_respuesta, "~", paste(variables_top, collapse = " + ")))
+  modelo <- glm(formula, data = data, family = binomial)
+  resumen <- summary(modelo)
+  
+}
+
+```
+
+```{r}
+
+resumen <- summary(modelo)
+summary(modelo)
+
+```
